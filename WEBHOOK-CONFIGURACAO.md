@@ -44,7 +44,7 @@ Acesse: [https://sandbox.asaas.com](https://sandbox.asaas.com) → **Configuraç
 | ✅ **PAYMENT_CONFIRMED** | Pagamento confirmado | Atualiza pedido para "paid", redireciona cliente para formulários |
 | ✅ **PAYMENT_RECEIVED** | Pagamento recebido | Mesma ação acima (backup) |
 | ✅ **PAYMENT_OVERDUE** | Pagamento vencido | Atualiza pedido para "overdue" |
-| ✅ **PAYMENT_CANCELLED** | Pagamento cancelado | Atualiza pedido para "cancelled" |
+| ✅ **PAYMENT_DELETED** | Cobrança removida/cancelada | Atualiza pedido para "cancelled" |
 
 ### Eventos Opcionais (⬜)
 
@@ -77,7 +77,7 @@ Formato: JSON
    - ☑️ PAYMENT_CONFIRMED
    - ☑️ PAYMENT_RECEIVED
    - ☑️ PAYMENT_OVERDUE
-   - ☑️ PAYMENT_CANCELLED
+   - ☑️ PAYMENT_DELETED
 
 7. (Opcional) Configure **Webhook Secret** para segurança adicional
 8. Clique em **Salvar**
@@ -329,7 +329,7 @@ https://seudominio.com/api/webhooks/asaas
 ☑️ PAYMENT_CONFIRMED
 ☑️ PAYMENT_RECEIVED
 ☑️ PAYMENT_OVERDUE
-☑️ PAYMENT_CANCELLED
+☑️ PAYMENT_DELETED
 ```
 
 ---

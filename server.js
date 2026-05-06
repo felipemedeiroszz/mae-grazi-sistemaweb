@@ -193,7 +193,7 @@ app.post('/api/webhooks/asaas', async (req, res) => {
           .eq('asaas_payment_id', payment.id);
         break;
 
-      case 'PAYMENT_CANCELLED':
+      case 'PAYMENT_DELETED':
         await supabase
           .from('orders')
           .update({ 
@@ -235,8 +235,13 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Mae Grazi Backend running on port ${PORT}`);
-  console.log(`ASAAS API URL: ${ASAAS_API_URL}`);
-});
+// Export for Vercel
+module.exports = app;
+
+// Start server only if not in Vercel environment
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Mae Grazi Backend running on port ${PORT}`);
+    console.log(`ASAAS API URL: ${ASAAS_API_URL}`);
+  });
+}

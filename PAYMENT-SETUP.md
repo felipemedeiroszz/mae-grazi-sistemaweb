@@ -51,7 +51,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
    - `PAYMENT_RECEIVED`
    - `PAYMENT_CONFIRMED`
    - `PAYMENT_OVERDUE`
-   - `PAYMENT_CANCELLED`
+   - `PAYMENT_DELETED`
 5. Configure o header `asaas-webhook-secret` com o valor de `ASAAS_WEBHOOK_SECRET`
 
 ## Executar
