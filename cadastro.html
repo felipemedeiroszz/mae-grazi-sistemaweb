@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro - Mae Grazi</title>
+    <meta http-equiv="refresh" content="0; url=cliente.html">
+    <script>
+        window.location.href = 'cliente.html';
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-gold: #ff1a1a;
+            --secondary-orange: #8B0000;
+            --dark-bg: #0a0a0a;
+            --dark-secondary: #1a0a0a;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--dark-bg) 0%, var(--dark-secondary) 50%, #0f0f0f 100%);
+            color: #ffffff;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Flex utilities */
+        .flex {
+            display: flex;
+        }
+
+        .items-center {
+            align-items: center;
+        }
+
+        .justify-between {
+            justify-content: space-between;
+        }
+
+        .space-x-3 > * + * {
+            margin-left: 12px;
+        }
+
+        .space-x-4 > * + * {
+            margin-left: 16px;
+        }
+
+        .space-y-6 > * + * {
+            margin-top: 24px;
+        }
+
+        /* Grid utilities */
+        .grid {
+            display: grid;
+        }
+
+        .grid-cols-1 {
+            grid-template-columns: repeat(1, 1fr);
+        }
+
+        .grid-cols-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .gap-6 {
+            gap: 24px;
+        }
+
+        /* Size utilities */
+        .w-12 {
+            width: 48px;
+        }
+
+        .h-12 {
+            height: 48px;
+        }
+
+        .w-16 {
+            width: 64px;
+        }
+
+        .h-16 {
+            height: 64px;
+        }
+
+        .w-20 {
+            width: 80px;
+        }
+
+        .h-20 {
+            height: 80px;
+        }
+
+        .w-full {
+            width: 100%;
+        }
+
+        .max-w-md {
+            max-width: 448px;
+        }
+
+        .mx-auto {
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Text utilities */
+        .text-center {
+            text-align: center;
+        }
+
+        .text-2xl {
+            font-size: 24px;
+            line-height: 32px;
+        }
+
+        .text-3xl {
+            font-size: 30px;
+            line-height: 36px;
+        }
+
+        .text-sm {
+            font-size: 14px;
+            line-height: 20px;
+        }
+
+        .text-xs {
+            font-size: 12px;
+            line-height: 16px;
+        }
+
+        .text-lg {
+            font-size: 18px;
+            line-height: 28px;
+        }
+
+        .font-bold {
+            font-weight: 700;
+        }
+
+        .font-medium {
+            font-weight: 500;
+        }
+
+        .font-semibold {
+            font-weight: 600;
+        }
+
+        /* Color utilities */
+        .text-yellow-400 {
+            color: #facc15;
+        }
+
+        .text-yellow-300 {
+            color: #fde047;
+        }
+
+        .text-gray-400 {
+            color: #9ca3af;
+        }
+
+        .text-gray-300 {
+            color: #d1d5db;
+        }
+
+        .text-gray-700 {
+            color: #374151;
+        }
+
+        .text-black {
+            color: #000000;
+        }
+
+        /* Background utilities */
+        .bg-gradient-to-br {
+            background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+        }
+
+        .from-yellow-400 {
+            --tw-gradient-from: #facc15;
+            --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(250 204 21 / 0));
+        }
+
+        .to-orange-500 {
+            --tw-gradient-to: #f97316;
+        }
+
+        /* Border utilities */
+        .rounded-full {
+            border-radius: 9999px;
+        }
+
+        .rounded-2xl {
+            border-radius: 16px;
+        }
+
+        .border-t {
+            border-top-width: 1px;
+        }
+
+        /* Padding utilities */
+        .p-8 {
+            padding: 32px;
+        }
+
+        .pt-8 {
+            padding-top: 32px;
+        }
+
+        .pb-4 {
+            padding-bottom: 16px;
+        }
+
+        .py-3 {
+            padding-top: 12px;
+            padding-bottom: 12px;
+        }
+
+        .py-8 {
+            padding-top: 32px;
+            padding-bottom: 32px;
+        }
+
+        .px-4 {
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        .mb-2 {
+            margin-bottom: 8px;
+        }
+
+        .mb-4 {
+            margin-bottom: 16px;
+        }
+
+        .mb-8 {
+            margin-bottom: 32px;
+        }
+
+        .mt-1 {
+            margin-top: 4px;
+        }
+
+        .mt-6 {
+            margin-top: 24px;
+        }
+
+        .mt-12 {
+            margin-top: 48px;
+        }
+
+        .mr-2 {
+            margin-right: 8px;
+        }
+
+        /* Position utilities */
+        .relative {
+            position: relative;
+        }
+
+        /* Electric Border Enhanced */
+        .electric-border {
+            position: relative;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .electric-border::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, var(--primary-gold), var(--secondary-orange), var(--primary-gold));
+            border-radius: 16px;
+            opacity: 0;
+            z-index: -1;
+            transition: opacity 0.3s ease;
+            animation: electricGlow 3s linear infinite;
+        }
+
+        .electric-border:hover::before {
+            opacity: 0.3;
+        }
+
+        @keyframes electricGlow {
+            0%, 100% { opacity: 0.1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Glass Effect Enhanced */
+        .glass-effect {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Enhanced Modal Styles */
+        .electric-border {
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(255, 107, 53, 0.1));
+            border: 2px solid var(--primary-gold);
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(212, 175, 55, 0.2),
+                inset 0 0 20px rgba(212, 175, 55, 0.05);
+        }
+
+        .electric-border::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, var(--primary-gold), var(--secondary-orange), var(--primary-gold), var(--secondary-orange));
+            border-radius: 20px;
+            opacity: 0.6;
+            z-index: -1;
+            animation: electricGlow 4s linear infinite;
+        }
+
+        @keyframes electricGlow {
+            0%, 100% { 
+                opacity: 0.3;
+                transform: rotate(0deg);
+            }
+            50% { 
+                opacity: 0.8;
+                transform: rotate(180deg);
+            }
+        }
+
+        /* Enhanced Form Styles */
+        .form-input {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 12px;
+            padding: 14px 18px;
+            color: #ffffff;
+            transition: all 0.3s ease;
+            width: 100%;
+            font-size: 15px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-gold);
+            box-shadow: 
+                0 0 0 3px rgba(212, 175, 55, 0.2),
+                0 0 20px rgba(212, 175, 55, 0.1);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .form-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Enhanced Button Styles */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-gold), var(--secondary-orange));
+            color: var(--dark-bg);
+            border: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 10px 30px rgba(212, 175, 55, 0.4),
+                0 0 20px rgba(212, 175, 55, 0.2);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Enhanced Labels */
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--primary-gold);
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Enhanced Checkbox */
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary-gold);
+            cursor: pointer;
+        }
+
+        .checkbox-label {
+            color: #d1d5db;
+            font-size: 14px;
+            line-height: 1.5;
+            cursor: pointer;
+        }
+
+        .checkbox-label a {
+            color: var(--primary-gold);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .checkbox-label a:hover {
+            color: var(--secondary-orange);
+            text-decoration: underline;
+        }
+
+        /* Enhanced Header */
+        .form-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .form-header .icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1.5rem;
+            background: linear-gradient(135deg, var(--primary-gold), var(--secondary-orange));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: var(--dark-bg);
+            box-shadow: 0 8px 25px rgba(212, 175, 55, 0.3);
+        }
+
+        .form-header h2 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-gold), var(--secondary-orange));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .form-header p {
+            color: #9ca3af;
+            font-size: 16px;
+        }
+
+        /* Enhanced Links */
+        .login-link {
+            text-align: center;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .login-link p {
+            color: #9ca3af;
+            font-size: 14px;
+        }
+
+        .login-link a {
+            color: var(--primary-gold);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s ease;
+        }
+
+        .login-link a:hover {
+            color: var(--secondary-orange);
+            text-decoration: underline;
+        }
+
+        /* Button Styles */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-gold), var(--secondary-orange));
+            color: var(--dark-bg);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(212, 175, 55, 0.3);
+            text-decoration: none;
+            color: var(--dark-bg);
+        }
+
+        .btn-secondary {
+            background: var(--glass-bg);
+            color: #ffffff;
+            border: 1px solid var(--glass-border);
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .btn-secondary:hover {
+            background: var(--glass-border);
+            transform: translateY(-2px);
+            text-decoration: none;
+            color: #ffffff;
+        }
+
+        /* Form Styles */
+        .form-input {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            color: #ffffff;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-gold);
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: #6b7280;
+        }
+
+        /* Form label */
+        .block {
+            display: block;
+        }
+
+        /* Checkbox */
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--primary-gold);
+        }
+
+        .flex-start {
+            align-items: flex-start;
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--glass-border);
+            border-radius: 50%;
+            border-top-color: var(--primary-gold);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Success/Error Messages */
+        .message {
+            padding: 16px 24px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .message.success {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+        }
+
+        .message.error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+
+        .message.info {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #3b82f6;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Hover states */
+        .hover\:text-yellow-300:hover {
+            color: #fde047;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            .grid-cols-3 {
+                grid-template-columns: repeat(1, 1fr);
+            }
+
+            .flex-col {
+                flex-direction: column;
+            }
+
+            .space-y-4 > * + * {
+                margin-top: 16px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .text-2xl {
+                font-size: 20px;
+                line-height: 28px;
+            }
+
+            .text-3xl {
+                font-size: 24px;
+                line-height: 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="container mx-auto pt-8 pb-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                    <i class="fas fa-crown text-xl text-black"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-yellow-400">Mae Grazi</h1>
+                    <p class="text-gray-400 text-sm">Serviços Espirituais</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="index.html" class="btn-secondary">
+                    <i class="fas fa-home mr-2"></i> Início
+                </a>
+                <a href="cliente.html" class="btn-secondary">
+                    <i class="fas fa-sign-in-alt mr-2"></i> Entrar
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-md mx-auto">
+            <!-- Registration Form -->
+            <div class="electric-border p-8 glass-effect">
+                <div class="form-header">
+                    <div class="icon">
+                        <i class="fas fa-user-plus"></i>
+                    </div>
+                    <h2>Criar Conta</h2>
+                    <p>Cadastre-se para acessar nossos serviços</p>
+                </div>
+
+                <!-- Messages -->
+                <div id="successMessage" class="message success hidden">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Cadastro realizado com sucesso!</span>
+                </div>
+
+                <div id="errorMessage" class="message error hidden">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="errorText"></span>
+                </div>
+
+                <!-- Registration Form -->
+                <form id="registrationForm">
+                    <div class="form-group">
+                        <label class="form-label">Nome Completo</label>
+                        <input type="text" id="fullName" required 
+                               class="form-input" placeholder="Seu nome completo">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="email" required 
+                               class="form-input" placeholder="seu@email.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Telefone</label>
+                        <input type="tel" id="phone" required 
+                               class="form-input" placeholder="(XX) XXXXX-XXXX">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Senha</label>
+                        <input type="password" id="password" required 
+                               class="form-input" placeholder="Crie uma senha forte">
+                        <p style="color: #9ca3af; font-size: 12px; margin-top: 6px;">Mínimo 6 caracteres</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Confirmar Senha</label>
+                        <input type="password" id="confirmPassword" required 
+                               class="form-input" placeholder="Repita sua senha">
+                    </div>
+
+                    <div class="form-group" style="display: flex; align-items: flex-start; gap: 12px;">
+                        <input type="checkbox" id="terms" required>
+                        <label for="terms" class="checkbox-label">
+                            Li e concordo com os <a href="#" class="text-yellow-400 hover:text-yellow-300">Termos de Serviço</a> e 
+                            <a href="#" class="text-yellow-400 hover:text-yellow-300">Política de Privacidade</a>
+                        </label>
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="btn-primary w-full">
+                        <i class="fas fa-user-plus" style="margin-right: 8px;"></i> Criar Conta
+                    </button>
+                </form>
+
+                <!-- Login Link -->
+                <div class="login-link">
+                    <p>
+                        Já tem uma conta? 
+                        <a href="cliente.html">Faça login aqui</a>
+                    </p>
+                </div>
+            </div>
+
+                    </div>
+    </main>
+
+    <script src="cadastro.js"></script>
+</body>
+</html>
