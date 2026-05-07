@@ -87,10 +87,13 @@ function hideSection(sectionId) {
 async function checkAuth() {
     try {
         // Check for stored session
-        const storedUser = localStorage.getItem('clienteSession');
+        const storedUser = localStorage.getItem('currentUser');
         if (storedUser) {
             currentUser = JSON.parse(storedUser);
             updateUIForLoggedInUser();
+            console.log('Usuário logado encontrado:', currentUser);
+        } else {
+            console.log('Nenhum usuário logado encontrado');
         }
     } catch (error) {
         console.error('Erro ao verificar autenticação:', error);
@@ -127,7 +130,7 @@ async function login(email, password) {
         // Verificar senha (implementar verificação adequada)
         // Por enquanto, vamos aceitar qualquer senha para testes
         currentUser = cliente;
-        localStorage.setItem('clienteSession', JSON.stringify(currentUser));
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
         updateUIForLoggedInUser();
         closeModal('loginModal');
         
@@ -167,7 +170,7 @@ async function register(nome, email, password, telefone) {
         if (error) throw error;
         
         currentUser = cliente;
-        localStorage.setItem('clienteSession', JSON.stringify(currentUser));
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
         updateUIForLoggedInUser();
         closeModal('registerModal');
         
@@ -973,8 +976,10 @@ async function findAsaasCustomer() {
 
 // UI Functions
 function openLoginModal() {
-    const modal = document.getElementById('loginModal');
-    if (modal) modal.classList.add('active');
+    console.log('=== INÍCIO openLoginModal ===');
+    console.log('Redirecionando para página de login...');
+    // Redirecionar para página de login
+    window.location.href = 'cliente.html';
 }
 
 function openRegisterModal() {
@@ -1128,13 +1133,19 @@ let currentCheckoutItems = [];
 
 // Load cart from server or localStorage
 async function loadCart() {
+    console.log('=== INÍCIO loadCart ===');
+    console.log('currentUser:', currentUser);
+    
     if (!currentUser) {
+        console.log('Usuário não logado, carregando carrinho de visitante');
         cart = JSON.parse(localStorage.getItem('guestCart') || '[]');
         updateCartUI();
         return;
     }
     
     try {
+        console.log('Carregando carrinho do usuário:', currentUser.id);
+        
         const { data, error } = await supabaseClient
             .from('cart_items')
             .select('*')
@@ -1142,8 +1153,10 @@ async function loadCart() {
         
         if (error) throw error;
         
+        console.log('Itens do carrinho encontrados:', data);
         cart = data || [];
         updateCartUI();
+        console.log('Carrinho atualizado com', cart.length, 'itens');
     } catch (error) {
         console.error('Erro ao carregar carrinho:', error);
     }
@@ -1152,24 +1165,8 @@ async function loadCart() {
 // Add item to cart
 async function addToCart(type, serviceId, nome, valor) {
     if (!currentUser) {
-        // Guest cart in localStorage
-        const existingIndex = cart.findIndex(item => item.tipo === type && item.servico_id === serviceId);
-        
-        if (existingIndex >= 0) {
-            cart[existingIndex].quantidade += 1;
-        } else {
-            cart.push({
-                tipo: type,
-                servico_id: serviceId,
-                nome: nome,
-                valor: valor,
-                quantidade: 1
-            });
-        }
-        
-        localStorage.setItem('guestCart', JSON.stringify(cart));
-        updateCartUI();
-        showNotification('Item adicionado ao carrinho!', 'success');
+        showNotification('Faça login para adicionar itens ao carrinho', 'warning');
+        openLoginModal();
         return;
     }
     
@@ -1183,7 +1180,9 @@ async function addToCart(type, serviceId, nome, valor) {
                 nome: nome,
                 valor: valor,
                 quantidade: 1
-            }, { onConflict: ['cliente_id', 'tipo', 'servico_id'] });
+            }, {
+                onConflict: 'cliente_id,tipo,servico_id'
+            });
         
         if (error) throw error;
         
@@ -1234,6 +1233,17 @@ function updateCartUI() {
 
 // Open cart modal
 function openCartModal() {
+    console.log('=== INÍCIO openCartModal ===');
+    console.log('currentUser:', currentUser);
+    
+    // Verificar se usuário está logado
+    if (!currentUser) {
+        console.log('Usuário não está logado, abrindo modal de login');
+        showNotification('Faça login para acessar seu carrinho', 'warning');
+        openLoginModal();
+        return;
+    }
+    
     const modal = document.getElementById('cartModal');
     const cartItemsContainer = document.getElementById('cartItems');
     const cartTotalValue = document.getElementById('cartTotalValue');
@@ -1315,8 +1325,12 @@ function closeCheckoutModal() {
     document.getElementById('cardPaymentSection').style.display = 'none';
 }
 
-// Backend API URL
-const BACKEND_URL = 'http://localhost:3001';
+// Backend API URL - funciona tanto local quanto no Vercel
+const BACKEND_URL = (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')) 
+    ? 'http://localhost:3001' 
+    : window.location.origin;
+
+console.log('BACKEND_URL configurada como:', BACKEND_URL);
 
 // Generate PIX payment via Backend API
 async function generatePixPayment() {
@@ -1411,7 +1425,7 @@ async function generatePixPayment() {
             });
         } catch (fetchError) {
             console.error('Fetch error:', fetchError);
-            throw new Error('Não foi possível conectar ao servidor de pagamentos. Verifique se o backend está rodando em http://localhost:3001');
+            throw new Error('Não foi possível conectar ao servidor de pagamentos. Tente novamente em instantes.');
         }
 
         console.log('Backend response status:', response.status);
@@ -1492,20 +1506,51 @@ function copyPixPayload() {
 
 // Process card payment via Backend API
 async function processCardPayment() {
+    console.log('=== INÍCIO processCardPayment ===');
+    console.log('currentUser:', currentUser);
+    
     if (!currentUser) {
+        console.log('Usuário não está logado');
         showNotification('Faça login para continuar', 'warning');
         openLoginModal();
         return;
     }
 
-    const cardNumber = document.getElementById('cardNumber').value.replace(/\s/g, '');
-    const cardHolder = document.getElementById('cardHolder').value;
-    const cardExpiry = document.getElementById('cardExpiry').value;
-    const cardCvv = document.getElementById('cardCvv').value;
-    const cardCpf = document.getElementById('cardCpf').value.replace(/\D/g, '');
-    const installments = parseInt(document.getElementById('installments').value) || 1;
+    console.log('Buscando campos do formulário...');
+    const cardNumberEl = document.getElementById('cardNumber');
+    const cardHolderEl = document.getElementById('cardHolder');
+    const cardExpiryEl = document.getElementById('cardExpiry');
+    const cardCvvEl = document.getElementById('cardCvv');
+    const cardCpfEl = document.getElementById('cardCpf');
+    const installmentsEl = document.getElementById('installments');
+    
+    console.log('Elementos encontrados:', {
+        cardNumber: !!cardNumberEl,
+        cardHolder: !!cardHolderEl,
+        cardExpiry: !!cardExpiryEl,
+        cardCvv: !!cardCvvEl,
+        cardCpf: !!cardCpfEl,
+        installments: !!installmentsEl
+    });
+    
+    const cardNumber = cardNumberEl ? cardNumberEl.value.replace(/\s/g, '') : '';
+    const cardHolder = cardHolderEl ? cardHolderEl.value : '';
+    const cardExpiry = cardExpiryEl ? cardExpiryEl.value : '';
+    const cardCvv = cardCvvEl ? cardCvvEl.value : '';
+    const cardCpf = cardCpfEl ? cardCpfEl.value.replace(/\D/g, '') : '';
+    const installments = installmentsEl ? parseInt(installmentsEl.value) || 1 : 1;
+    
+    console.log('Valores dos campos:', {
+        cardNumber: cardNumber ? '***' + cardNumber.slice(-4) : 'vazio',
+        cardHolder,
+        cardExpiry,
+        cardCvv: cardCvv ? '***' : 'vazio',
+        cardCpf: cardCpf ? '***' + cardCpf.slice(-3) : 'vazio',
+        installments
+    });
 
     if (!cardNumber || !cardHolder || !cardExpiry || !cardCvv || !cardCpf) {
+        console.log('Validação falhou: campos vazios');
         showNotification('Preencha todos os dados do cartão', 'warning');
         return;
     }
@@ -1547,40 +1592,50 @@ async function processCardPayment() {
         // Parse expiry
         const [expMonth, expYear] = cardExpiry.split('/');
 
-        // Create card payment via backend
+        console.log('Enviando pagamento com cartão...');
+        console.log('BACKEND_URL:', BACKEND_URL);
+        
+        const paymentData = {
+            customerData: {
+                name: cardHolder,
+                email: currentUser.email,
+                cpfCnpj: cardCpf,
+                phone: currentUser.telefone || currentUser.whatsapp || ''
+            },
+            value: totalValue,
+            description: `Pedido ${order.id.slice(0, 8)} - Mae Grazi`,
+            externalReference: order.id,
+            installmentCount: installments,
+            creditCard: {
+                holderName: cardHolder,
+                number: cardNumber,
+                expiryMonth: expMonth,
+                expiryYear: expYear,
+                ccv: cardCvv
+            },
+            creditCardHolderInfo: {
+                name: cardHolder,
+                email: currentUser.email,
+                cpfCnpj: cardCpf,
+                mobilePhone: currentUser.telefone || currentUser.whatsapp || '',
+                postalCode: '74015010',
+                addressNumber: '123'
+            }
+        };
+        
+        console.log('Dados do pagamento:', paymentData);
+
         const response = await fetch(`${BACKEND_URL}/api/payments/card`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                customerData: {
-                    name: cardHolder,
-                    email: currentUser.email,
-                    cpfCnpj: cardCpf,
-                    phone: currentUser.telefone || currentUser.whatsapp || ''
-                },
-                value: totalValue,
-                description: `Pedido ${order.id.slice(0, 8)} - Mae Grazi`,
-                externalReference: order.id,
-                installmentCount: installments,
-                creditCard: {
-                    holderName: cardHolder,
-                    number: cardNumber,
-                    expiryMonth: expMonth,
-                    expiryYear: expYear,
-                    ccv: cardCvv
-                },
-                creditCardHolderInfo: {
-                    name: cardHolder,
-                    email: currentUser.email,
-                    cpfCnpj: cardCpf,
-                    mobilePhone: currentUser.telefone || currentUser.whatsapp || ''
-                }
-            })
+            body: JSON.stringify(paymentData)
         });
 
+        console.log('Status da resposta:', response.status);
         const data = await response.json();
+        console.log('Resposta do backend:', data);
 
         if (!data.success) {
             throw new Error(data.error || 'Erro ao processar pagamento');
@@ -1830,3 +1885,32 @@ window.copyPixPayload = copyPixPayload;
 window.processCardPayment = processCardPayment;
 window.loadCart = loadCart;
 window.flyToCart = flyToCart;
+
+// Adicionar event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Event listener do botão de pagamento com cartão
+    const cardBtn = document.getElementById('processCardBtn');
+    if (cardBtn) {
+        cardBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Botão de cartão clicado via event listener');
+            processCardPayment();
+        });
+        console.log('Event listener do botão de cartão adicionado');
+    } else {
+        console.log('Botão processCardBtn não encontrado');
+    }
+    
+    // Event listener do botão do carrinho
+    const cartBtn = document.getElementById('cartButton');
+    if (cartBtn) {
+        cartBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Botão do carrinho clicado via event listener');
+            openCartModal();
+        });
+        console.log('Event listener do botão do carrinho adicionado');
+    } else {
+        console.log('Botão cartButton não encontrado');
+    }
+});

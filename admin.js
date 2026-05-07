@@ -367,7 +367,7 @@ async function loadRecentOrders() {
                             <tr>
                                 <td>${order.service_nome || '-'}</td>
                                 <td>${order.cliente_nome || '-'}</td>
-                                <td>R$ ${order.valor?.toFixed(2) || '0.00'}</td>
+                                <td>R$ ${order.valor_total?.toFixed(2) || '0.00'}</td>
                                 <td>${getStatusBadge(order.status)}</td>
                                 <td>${new Date(order.created_at).toLocaleDateString('pt-BR')}</td>
                             </tr>
@@ -706,7 +706,7 @@ async function updateDashboardStats() {
         
         // Contar pedidos pendentes
         const { data: pendingOrders } = await supabaseClient
-            .from('pedidos')
+            .from('orders')
             .select('id')
             .eq('status', 'pending');
         
@@ -1541,6 +1541,7 @@ async function loadPedidosSection() {
                             <th>Serviço</th>
                             <th>Valor</th>
                             <th>Status</th>
+                            <th>Formulário</th>
                             <th>Data</th>
                             <th>Ações</th>
                         </tr>
@@ -1583,7 +1584,7 @@ async function loadPedidosTable() {
         if (pedidos.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="empty-state">
+                    <td colspan="8" class="empty-state">
                         <i class="fas fa-shopping-cart"></i>
                         <h3>Nenhum pedido encontrado</h3>
                         <p>Não há pedidos${statusFilter ? ` com status "${statusFilter}"` : ''}</p>
@@ -1593,13 +1594,20 @@ async function loadPedidosTable() {
             return;
         }
         
-        tbody.innerHTML = pedidos.map(pedido => `
+        tbody.innerHTML = pedidos.map(pedido => {
+            const formStatus = pedido.form_data ? 'Respondido' : 'Pendente';
+            const formBadge = pedido.form_data 
+                ? '<span class="badge badge-success">Formulário Respondido</span>' 
+                : '<span class="badge badge-warning">Formulário Pendente</span>';
+            
+            return `
             <tr>
                 <td>#${pedido.id.toString().substring(0, 8)}</td>
                 <td>${pedido.cliente_nome}</td>
                 <td>${pedido.service_nome}</td>
-                <td>R$ ${pedido.valor.toFixed(2)}</td>
+                <td>R$ ${pedido.valor_total.toFixed(2)}</td>
                 <td>${getStatusBadge(pedido.status)}</td>
+                <td>${formBadge}</td>
                 <td>${new Date(pedido.created_at).toLocaleDateString('pt-BR')}</td>
                 <td>
                     <button class="btn btn-secondary" onclick="viewPedido('${pedido.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
@@ -1607,7 +1615,8 @@ async function loadPedidosTable() {
                     </button>
                 </td>
             </tr>
-        `).join('');
+            `;
+        }).join('');
         
     } catch (error) {
         console.error('Erro ao carregar pedidos:', error);
@@ -1615,7 +1624,7 @@ async function loadPedidosTable() {
         if (tbody) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="empty-state">
+                    <td colspan="8" class="empty-state">
                         <i class="fas fa-exclamation-triangle"></i>
                         <h3>Erro ao carregar pedidos</h3>
                         <p>${error.message}</p>
@@ -1696,7 +1705,7 @@ async function loadClientesTable() {
         const clientesComPedidos = await Promise.all(
             clientes.map(async (cliente) => {
                 const { data: pedidos } = await supabaseClient
-                    .from('pedidos')
+                    .from('orders')
                     .select('id')
                     .eq('cliente_id', cliente.id);
                 
@@ -1961,7 +1970,8 @@ function getStatusBadge(status) {
         'pending': '<span class="badge badge-warning">Pendente</span>',
         'paid': '<span class="badge badge-success">Pago</span>',
         'cancelled': '<span class="badge badge-info">Cancelado</span>',
-        'completed': '<span class="badge badge-success">Concluído</span>'
+        'completed': '<span class="badge badge-success">Concluído</span>',
+        'delivered': '<span class="badge badge-primary">Entregue</span>'
     };
     return badges[status] || badges['pending'];
 }
@@ -2447,7 +2457,7 @@ async function viewPedido(id) {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Valor</label>
-                    <input type="text" class="form-control" value="R$ ${pedido.valor.toFixed(2)}" readonly>
+                    <input type="text" class="form-control" value="R$ ${pedido.valor_total.toFixed(2)}" readonly>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Status</label>
@@ -2455,6 +2465,7 @@ async function viewPedido(id) {
                         <option value="pending" ${pedido.status === 'pending' ? 'selected' : ''}>Pendente</option>
                         <option value="paid" ${pedido.status === 'paid' ? 'selected' : ''}>Pago</option>
                         <option value="completed" ${pedido.status === 'completed' ? 'selected' : ''}>Concluído</option>
+                        <option value="delivered" ${pedido.status === 'delivered' ? 'selected' : ''}>Entregue</option>
                         <option value="cancelled" ${pedido.status === 'cancelled' ? 'selected' : ''}>Cancelado</option>
                     </select>
                 </div>
@@ -2462,6 +2473,29 @@ async function viewPedido(id) {
                     <label class="form-label">Data</label>
                     <input type="text" class="form-control" value="${new Date(pedido.created_at).toLocaleString('pt-BR')}" readonly>
                 </div>
+                
+                <!-- Dados do Formulário -->
+                ${pedido.form_data ? `
+                <div class="form-group">
+                    <label class="form-label">Respostas do Formulário</label>
+                    <div style="background: var(--dark); padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+                        ${(() => {
+                            try {
+                                const formData = typeof pedido.form_data === 'string' ? JSON.parse(pedido.form_data) : pedido.form_data;
+                                return Object.entries(formData).map(([key, value]) => `
+                                    <div style="margin-bottom: 0.75rem;">
+                                        <strong style="color: var(--primary); text-transform: capitalize;">${key.replace(/_/g, ' ')}:</strong>
+                                        <div style="color: var(--text-secondary); margin-top: 0.25rem;">${value}</div>
+                                    </div>
+                                `).join('');
+                            } catch (e) {
+                                return '<div style="color: var(--text-secondary);">Erro ao carregar dados do formulário</div>';
+                            }
+                        })()}
+                    </div>
+                </div>
+                ` : ''}
+                
                 <div class="form-group">
                     <button class="btn btn-primary" onclick="updatePedidoStatus('${pedido.id}')">Atualizar Status</button>
                 </div>
@@ -2479,7 +2513,7 @@ async function updatePedidoStatus(id) {
     
     try {
         const { error } = await supabaseClient
-            .from('pedidos')
+            .from('orders')
             .update({ status, updated_at: new Date().toISOString() })
             .eq('id', id);
         
@@ -2546,7 +2580,7 @@ async function viewCliente(id) {
                                 ${pedidos && pedidos.length > 0 ? pedidos.map(p => `
                                     <tr>
                                         <td>${p.service_nome}</td>
-                                        <td>R$ ${p.valor.toFixed(2)}</td>
+                                        <td>R$ ${p.valor_total.toFixed(2)}</td>
                                         <td>${getStatusBadge(p.status)}</td>
                                         <td>${new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
                                     </tr>

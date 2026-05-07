@@ -167,26 +167,54 @@ async function loadDashboardData() {
 // Update Form Badge Count (for initial load)
 async function updateFormBadgeCount() {
     try {
+        // Get paid orders with items that need form submission
         const { data: orders, error } = await supabaseClient
-            .from('pedidos')
+            .from('orders')
             .select(`
-                id,
-                form_data,
-                trabalhos(perguntas),
-                rituais(perguntas)
+                *,
+                order_items!inner(tipo, servico_id, form_data)
             `)
             .eq('cliente_id', currentUser.id)
             .eq('status', 'paid');
         
         if (error) throw error;
         
-        const pendingCount = orders.filter(order => {
-            const service = order.trabalhos || order.rituais;
-            const perguntas = service?.perguntas || [];
-            const hasQuestions = perguntas.length > 0;
-            const formNotSubmitted = !order.form_data || Object.keys(order.form_data).length === 0;
-            return hasQuestions && formNotSubmitted;
-        }).length;
+        let pendingCount = 0;
+        
+        // Check each order item
+        for (const order of orders) {
+            if (order.order_items) {
+                for (const item of order.order_items) {
+                    // Get service details
+                    let service = null;
+                    if (item.tipo === 'trabalho') {
+                        const { data: trabalho } = await supabaseClient
+                            .from('trabalhos')
+                            .select('perguntas')
+                            .eq('id', item.servico_id)
+                            .single();
+                        service = trabalho;
+                    } else if (item.tipo === 'ritual') {
+                        const { data: ritual } = await supabaseClient
+                            .from('rituais')
+                            .select('perguntas')
+                            .eq('id', item.servico_id)
+                            .single();
+                        service = ritual;
+                    }
+                    
+                    if (service) {
+                        const perguntas = service.perguntas || [];
+                        const hasQuestions = perguntas.length > 0;
+                        const formNotSubmitted = !item.form_data || Object.keys(item.form_data).length === 0;
+                        
+                        if (hasQuestions && formNotSubmitted) {
+                            pendingCount++;
+                        }
+                    }
+                }
+            }
+        }
         
         updateFormBadge(pendingCount);
         
@@ -199,8 +227,12 @@ async function updateFormBadgeCount() {
 async function loadOrders() {
     try {
         const { data, error } = await supabaseClient
-            .from('order_with_details')
-            .select('*')
+            .from('orders')
+            .select(`
+                *,
+                clientes(nome, email, telefone),
+                order_items(tipo, servico_id, nome, valor_unitario, quantidade)
+            `)
             .eq('cliente_id', currentUser.id)
             .order('created_at', { ascending: false })
             .limit(5); // Recent orders only
@@ -231,23 +263,26 @@ function renderRecentOrders() {
         return;
     }
     
-    container.innerHTML = orders.map(order => `
+    container.innerHTML = orders.map(order => {
+        const firstItem = order.order_items && order.order_items[0];
+        const itemName = firstItem ? firstItem.nome : 'Pedido';
+        return `
         <div class="order-item">
             <div class="order-info">
-                <h4>${order.service_nome}</h4>
+                <h4>${itemName}</h4>
                 <p>Pedido #${order.id.toString().substring(0, 8)}</p>
                 <p>${new Date(order.created_at).toLocaleDateString('pt-BR')}</p>
             </div>
             <div style="text-align: right;">
                 <div style="font-weight: bold; color: var(--primary-gold); margin-bottom: 0.5rem;">
-                    R$ ${order.valor.toFixed(2)}
+                    R$ ${order.valor_total.toFixed(2)}
                 </div>
                 <span class="order-status status-${order.status}">
                     ${getStatusText(order.status)}
                 </span>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // Render Orders Error
@@ -267,7 +302,7 @@ async function updateStats() {
     try {
         // Get all orders for this client
         const { data: allOrders, error } = await supabaseClient
-            .from('order_with_details')
+            .from('orders')
             .select('*')
             .eq('cliente_id', currentUser.id);
         
@@ -282,7 +317,7 @@ async function updateStats() {
         const completedOrders = orders.filter(o => o.status === 'completed').length;
         const totalSpent = orders
             .filter(o => o.status === 'paid' || o.status === 'completed')
-            .reduce((sum, o) => sum + o.valor, 0);
+            .reduce((sum, o) => sum + o.valor_total, 0);
         
         // Update UI
         updateStat('totalOrders', totalOrders);
@@ -337,6 +372,7 @@ function getStatusText(status) {
         'pending': 'Pendente',
         'paid': 'Pago',
         'completed': 'Concluído',
+        'delivered': 'Entregue',
         'cancelled': 'Cancelado'
     };
     return statusMap[status] || status;
@@ -411,11 +447,11 @@ async function loadPendingForms() {
     try {
         // Get paid orders that need form submission
         const { data: orders, error } = await supabaseClient
-            .from('pedidos')
+            .from('orders')
             .select(`
                 *,
-                trabalhos(id, nome, descricao, icon_url, perguntas, requer_imagem),
-                rituais(id, nome, descricao, icon_url, perguntas, requer_imagem)
+                clientes(nome, email, telefone),
+                order_items!inner(tipo, servico_id, nome, form_data)
             `)
             .eq('cliente_id', currentUser.id)
             .eq('status', 'paid')
@@ -423,14 +459,45 @@ async function loadPendingForms() {
         
         if (error) throw error;
         
-        // Filter orders that have questions but no form data submitted
-        const pendingForms = orders.filter(order => {
-            const service = order.trabalhos || order.rituais;
-            const perguntas = service?.perguntas || [];
-            const hasQuestions = perguntas.length > 0;
-            const formNotSubmitted = !order.form_data || Object.keys(order.form_data).length === 0;
-            return hasQuestions && formNotSubmitted;
-        });
+        // Get service details for each order item
+        const pendingForms = [];
+        for (const order of orders) {
+            if (order.order_items) {
+                for (const item of order.order_items) {
+                    // Get service details based on type
+                    let service = null;
+                    if (item.tipo === 'trabalho') {
+                        const { data: trabalho } = await supabaseClient
+                            .from('trabalhos')
+                            .select('id, nome, descricao, icon_url, perguntas, requer_imagem')
+                            .eq('id', item.servico_id)
+                            .single();
+                        service = trabalho;
+                    } else if (item.tipo === 'ritual') {
+                        const { data: ritual } = await supabaseClient
+                            .from('rituais')
+                            .select('id, nome, descricao, icon_url, perguntas, requer_imagem')
+                            .eq('id', item.servico_id)
+                            .single();
+                        service = ritual;
+                    }
+                    
+                    if (service) {
+                        const perguntas = service.perguntas || [];
+                        const hasQuestions = perguntas.length > 0;
+                        const formNotSubmitted = !item.form_data || Object.keys(item.form_data).length === 0;
+                        
+                        if (hasQuestions && formNotSubmitted) {
+                            pendingForms.push({
+                                ...order,
+                                service: service,
+                                orderItem: item
+                            });
+                        }
+                    }
+                }
+            }
+        }
         
         // Update badge count
         updateFormBadge(pendingForms.length);
@@ -449,26 +516,23 @@ async function loadPendingForms() {
             return;
         }
         
-        container.innerHTML = pendingForms.map(order => {
-            const service = order.trabalhos || order.rituais;
-            return `
-                <div class="order-item" style="margin-bottom: 1rem; cursor: pointer;" onclick="trackOrder('${order.id}')">
-                    <div class="order-info">
-                        <h4 style="color: var(--primary-gold);">${service?.nome || 'Serviço'}</h4>
-                        <p>Pedido #${order.id.toString().substring(0, 8)}</p>
-                        <p style="color: #fbbf24;"><i class="fas fa-exclamation-circle"></i> Formulário pendente</p>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-weight: bold; color: var(--primary-gold); margin-bottom: 0.5rem;">
-                            R$ ${order.valor.toFixed(2)}
-                        </div>
-                        <button class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
-                            <i class="fas fa-edit"></i> Responder
-                        </button>
-                    </div>
+        container.innerHTML = pendingForms.map(order => `
+            <div class="order-item" style="margin-bottom: 1rem; cursor: pointer;" onclick="trackOrder('${order.id}', '${order.orderItem.servico_id}')">
+                <div class="order-info">
+                    <h4 style="color: var(--primary-gold);">${order.service?.nome || 'Serviço'}</h4>
+                    <p>Pedido #${order.id.toString().substring(0, 8)}</p>
+                    <p style="color: #fbbf24;"><i class="fas fa-exclamation-circle"></i> Formulário pendente</p>
                 </div>
-            `;
-        }).join('');
+                <div style="text-align: right;">
+                    <div style="font-weight: bold; color: var(--primary-gold); margin-bottom: 0.5rem;">
+                        R$ ${order.valor_total.toFixed(2)}
+                    </div>
+                    <button class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                        <i class="fas fa-edit"></i> Responder
+                    </button>
+                </div>
+            </div>
+        `).join('');
         
     } catch (error) {
         console.error('Error loading pending forms:', error);
@@ -518,8 +582,12 @@ async function viewAllOrders() {
 async function loadAllOrders() {
     try {
         const { data, error } = await supabaseClient
-            .from('order_with_details')
-            .select('*')
+            .from('orders')
+            .select(`
+                *,
+                clientes(nome, email, telefone),
+                order_items(tipo, servico_id, nome, valor_unitario, quantidade)
+            `)
             .eq('cliente_id', currentUser.id)
             .order('created_at', { ascending: false });
         
@@ -577,15 +645,18 @@ function renderAllOrders() {
         return;
     }
     
-    container.innerHTML = filteredOrders.map(order => `
+    container.innerHTML = filteredOrders.map(order => {
+        const firstItem = order.order_items && order.order_items[0];
+        const itemName = firstItem ? firstItem.nome : 'Pedido';
+        return `
         <div class="order-item" style="cursor: pointer;" onclick="showOrderDetail('${order.id}')">
             <div class="order-info">
-                <h4>${order.service_nome}</h4>
+                <h4>${itemName}</h4>
                 <p>Pedido #${order.id.toString().substring(0, 8)} • ${new Date(order.created_at).toLocaleDateString('pt-BR')}</p>
             </div>
             <div style="text-align: right;">
                 <div style="font-weight: bold; color: var(--primary-gold); margin-bottom: 0.5rem;">
-                    R$ ${order.valor.toFixed(2)}
+                    R$ ${order.valor_total.toFixed(2)}
                 </div>
                 <span class="order-status status-${order.status}">
                     ${getStatusText(order.status)}
@@ -598,7 +669,7 @@ function renderAllOrders() {
                 ` : ''}
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // Show Order Detail
@@ -610,23 +681,30 @@ async function showOrderDetail(orderId) {
         const content = document.getElementById('orderDetailContent');
         if (!content) return;
         
+        const firstItem = order.order_items && order.order_items[0];
+        const itemName = firstItem ? firstItem.nome : 'Pedido';
+        
         content.innerHTML = `
             <div class="order-detail-header">
-                <img src="${order.service_icon || 'https://via.placeholder.com/100'}" alt="${order.service_nome}" class="order-detail-image">
-                <div class="order-detail-info">
-                    <h3>${order.service_nome}</h3>
+                <div class="order-detail-info" style="flex: 1;">
+                    <h3>${itemName}</h3>
                     <p>Pedido #${order.id.toString().substring(0, 8)}</p>
                     <p>Data: ${new Date(order.created_at).toLocaleDateString('pt-BR')}</p>
                     <p>Status: <span class="order-status status-${order.status}">${getStatusText(order.status)}</span></p>
                 </div>
                 <div class="order-detail-price">
-                    R$ ${order.valor.toFixed(2)}
+                    R$ ${order.valor_total.toFixed(2)}
                 </div>
             </div>
             
             <div style="margin-bottom: 1.5rem;">
-                <h4 style="color: var(--primary-gold); margin-bottom: 0.75rem;">Descrição do Serviço</h4>
-                <p style="color: #9ca3af;">${order.service_descricao || 'Sem descrição disponível.'}</p>
+                <h4 style="color: var(--primary-gold); margin-bottom: 0.75rem;">Itens do Pedido</h4>
+                ${order.order_items && order.order_items.length > 0 ? order.order_items.map(item => `
+                    <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
+                        <p style="color: #d1d5db; font-weight: 500;">${item.nome}</p>
+                        <p style="color: #9ca3af; font-size: 0.875rem;">${item.quantidade}x R$ ${item.valor_unitario.toFixed(2)} = R$ ${item.valor_total.toFixed(2)}</p>
+                    </div>
+                `).join('') : '<p style="color: #9ca3af;">Nenhum item encontrado.</p>'}
             </div>
             
             ${order.status === 'pending' && order.asaas_payment_url ? `
@@ -638,12 +716,6 @@ async function showOrderDetail(orderId) {
                         <i class="fas fa-credit-card"></i> Pagar Agora
                     </a>
                 </div>
-            ` : ''}
-            
-            ${order.status === 'paid' ? `
-                <button class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;" onclick="closeModal('orderDetailModal'); trackOrder('${order.id}')">
-                    <i class="fas fa-tasks"></i> Acompanhar Pedido / Enviar Informações
-                </button>
             ` : ''}
             
             <div class="form-actions" style="justify-content: center;">
@@ -660,7 +732,7 @@ async function showOrderDetail(orderId) {
 }
 
 // Track Order (Acompanhar Pedido - Formulário + Upload)
-async function trackOrder(orderId) {
+async function trackOrder(orderId, servicoId = null) {
     currentTrackOrderId = orderId;
     openModal('trackOrderModal');
     
@@ -674,13 +746,13 @@ async function trackOrder(orderId) {
     `;
     
     try {
-        // Get order details with service info
+        // Get order details with items
         const { data: order, error } = await supabaseClient
-            .from('pedidos')
+            .from('orders')
             .select(`
                 *,
-                trabalhos(id, nome, descricao, icon_url, perguntas, requer_imagem),
-                rituais(id, nome, descricao, icon_url, perguntas, requer_imagem)
+                clientes(nome, email, telefone),
+                order_items(tipo, servico_id, nome, form_data)
             `)
             .eq('id', orderId)
             .eq('cliente_id', currentUser.id)
@@ -688,103 +760,118 @@ async function trackOrder(orderId) {
         
         if (error) throw error;
         
-        const service = order.trabalhos || order.rituais;
-        const perguntas = service?.perguntas || [];
-        const requerImagem = service?.requer_imagem || false;
+        // Filter items if servicoId is provided (for specific form)
+        let itemsToShow = order.order_items || [];
+        if (servicoId) {
+            itemsToShow = itemsToShow.filter(item => item.servico_id === servicoId);
+        }
         
-        // Check if form already submitted
-        const formSubmitted = order.form_data && Object.keys(order.form_data).length > 0;
+        if (itemsToShow.length === 0) {
+            content.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Item não encontrado</h3>
+                    <p>Este item do pedido não foi encontrado.</p>
+                </div>
+            `;
+            return;
+        }
         
         let html = `
             <div class="order-detail-header">
                 <div class="order-detail-info" style="flex: 1;">
-                    <h3>${service?.nome || 'Serviço'}</h3>
-                    <p>Pedido #${order.id.toString().substring(0, 8)}</p>
+                    <h3>Pedido #${order.id.toString().substring(0, 8)}</h3>
                     <p>Status: <span class="order-status status-${order.status}">${getStatusText(order.status)}</span></p>
                 </div>
                 <div class="order-detail-price">
-                    R$ ${order.valor.toFixed(2)}
+                    R$ ${order.valor_total.toFixed(2)}
                 </div>
             </div>
         `;
         
-        // Form Section
-        if (perguntas.length > 0) {
+        // Process each item
+        for (const item of itemsToShow) {
+            // Get service details
+            let service = null;
+            if (item.tipo === 'trabalho') {
+                const { data: trabalho } = await supabaseClient
+                    .from('trabalhos')
+                    .select('id, nome, descricao, icon_url, perguntas, requer_imagem')
+                    .eq('id', item.servico_id)
+                    .single();
+                service = trabalho;
+            } else if (item.tipo === 'ritual') {
+                const { data: ritual } = await supabaseClient
+                    .from('rituais')
+                    .select('id, nome, descricao, icon_url, perguntas, requer_imagem')
+                    .eq('id', item.servico_id)
+                    .single();
+                service = ritual;
+            }
+            
+            if (!service) continue;
+            
+            const perguntas = service.perguntas || [];
+            const requerImagem = service.requer_imagem || false;
+            const formSubmitted = item.form_data && Object.keys(item.form_data).length > 0;
+            
             html += `
-                <div style="margin-bottom: 2rem;">
+                <div style="margin-bottom: 2rem; padding: 1.5rem; border: 1px solid var(--glass-border); border-radius: 12px;">
                     <h4 style="color: var(--primary-gold); margin-bottom: 1rem;">
-                        <i class="fas fa-clipboard-list"></i> Informações Necessárias
+                        <i class="fas fa-star"></i> ${service.nome}
                     </h4>
-                    ${formSubmitted ? `
-                        <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); padding: 1rem; border-radius: 8px;">
-                            <p style="color: #22c55e;"><i class="fas fa-check-circle"></i> Formulário já enviado em ${new Date(order.form_submitted_at).toLocaleDateString('pt-BR')}</p>
-                        </div>
-                        <div style="margin-top: 1rem;">
-                            ${Object.entries(order.form_data).map(([key, value], index) => `
-                                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem;">
-                                    <p style="color: var(--primary-gold); font-weight: 500; margin-bottom: 0.5rem;">${index + 1}. ${perguntas[parseInt(key.split('_')[1])] || key}</p>
-                                    <p style="color: #d1d5db;">${value}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : `
-                        <form id="trackOrderForm">
-                            ${perguntas.map((pergunta, index) => `
-                                <div class="form-group">
-                                    <label>${index + 1}. ${pergunta}</label>
-                                    <textarea name="pergunta_${index}" rows="3" required
-                                              placeholder="Digite sua resposta..."
-                                              style="width: 100%; padding: 0.875rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff; resize: vertical;">${order.form_data?.[`pergunta_${index}`] || ''}</textarea>
-                                </div>
-                            `).join('')}
-                            <button type="submit" class="btn btn-primary" style="width: 100%;">
-                                <i class="fas fa-save"></i> Salvar Respostas
-                            </button>
-                        </form>
-                    `}
-                </div>
             `;
-        }
-        
-        // Upload Section
-        if (requerImagem || perguntas.length > 0) {
-            html += `
-                <div style="border-top: 1px solid var(--glass-border); padding-top: 2rem;">
-                    <h4 style="color: var(--primary-gold); margin-bottom: 1rem;">
-                        <i class="fas fa-camera"></i> Fotos / Imagens
-                    </h4>
-                    <p style="color: #9ca3af; margin-bottom: 1rem;">Anexe fotos relacionadas ao seu pedido. Você pode enviar várias imagens.</p>
-                    
-                    <div class="file-upload-area" onclick="document.getElementById('orderFileInput').click()">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <p>Clique para selecionar fotos</p>
-                        <small>ou arraste e solte aqui</small>
-                        <input type="file" id="orderFileInput" multiple accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+            
+            // Form Section
+            if (perguntas.length > 0) {
+                html += `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5 style="color: var(--primary-gold); margin-bottom: 1rem;">
+                            <i class="fas fa-clipboard-list"></i> Informações Necessárias
+                        </h5>
+                        ${formSubmitted ? `
+                            <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); padding: 1rem; border-radius: 8px;">
+                                <p style="color: #22c55e;"><i class="fas fa-check-circle"></i> Formulário já respondido</p>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                ${Object.entries(item.form_data).map(([key, value], index) => `
+                                    <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem;">
+                                        <p style="color: var(--primary-gold); font-weight: 500; margin-bottom: 0.5rem;">${index + 1}. ${perguntas[parseInt(key.split('_')[1])] || key}</p>
+                                        <p style="color: #d1d5db;">${value}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : `
+                            <form id="trackOrderForm_${item.servico_id}">
+                                ${perguntas.map((pergunta, index) => `
+                                    <div class="form-group">
+                                        <label>${index + 1}. ${pergunta}</label>
+                                        <textarea name="pergunta_${index}" rows="3" required
+                                                  placeholder="Digite sua resposta..."
+                                                  style="width: 100%; padding: 0.875rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff; resize: vertical;">${item.form_data?.[`pergunta_${index}`] || ''}</textarea>
+                                    </div>
+                                `).join('')}
+                                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                    <i class="fas fa-save"></i> Salvar Respostas
+                                </button>
+                            </form>
+                        `}
                     </div>
-                    
-                    <div id="uploadPreview" class="uploaded-files"></div>
-                    
-                    <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="uploadOrderFiles('${orderId}')">
-                        <i class="fas fa-upload"></i> Enviar Fotos
-                    </button>
-                    
-                    <div id="existingFiles" style="margin-top: 1.5rem;"></div>
-                </div>
-            `;
+                `;
+            }
+            
+            html += `</div>`;
         }
         
         content.innerHTML = html;
         
-        // Setup form submission if not submitted yet
-        if (!formSubmitted && perguntas.length > 0) {
-            const form = document.getElementById('trackOrderForm');
+        // Setup form submission handlers
+        for (const item of itemsToShow) {
+            const form = document.getElementById(`trackOrderForm_${item.servico_id}`);
             if (form) {
-                form.addEventListener('submit', handleTrackOrderSubmit);
+                form.addEventListener('submit', (e) => handleTrackOrderSubmit(e, item.servico_id));
             }
         }
-        
-        // Load existing files
-        loadOrderFiles(orderId);
         
     } catch (error) {
         console.error('Error loading order track:', error);
@@ -799,7 +886,7 @@ async function trackOrder(orderId) {
 }
 
 // Handle Track Order Form Submit
-async function handleTrackOrderSubmit(e) {
+async function handleTrackOrderSubmit(e, servicoId) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
@@ -811,13 +898,12 @@ async function handleTrackOrderSubmit(e) {
     
     try {
         const { error } = await supabaseClient
-            .from('pedidos')
+            .from('order_items')
             .update({
-                form_data: answers,
-                form_submitted_at: new Date().toISOString()
+                form_data: answers
             })
-            .eq('id', currentTrackOrderId)
-            .eq('cliente_id', currentUser.id);
+            .eq('order_id', currentTrackOrderId)
+            .eq('servico_id', servicoId);
         
         if (error) throw error;
         
@@ -827,7 +913,7 @@ async function handleTrackOrderSubmit(e) {
         updateFormBadgeCount();
         
         // Reload to show submitted state
-        trackOrder(currentTrackOrderId);
+        trackOrder(currentTrackOrderId, servicoId);
         
     } catch (error) {
         console.error('Error saving form:', error);

@@ -102,7 +102,7 @@ app.post('/api/payments/card', async (req, res) => {
     // Create card payment
     const paymentData = {
       customer,
-      billingType: installmentCount > 1 ? 'CREDIT_CARD' : 'DEBIT_CARD',
+      billingType: 'CREDIT_CARD',
       value,
       dueDate: new Date().toISOString().split('T')[0],
       description,
@@ -116,7 +116,9 @@ app.post('/api/payments/card', async (req, res) => {
       paymentData.creditCardHolderInfo = creditCardHolderInfo;
     }
 
+    console.log('Enviando pagamento para Asaas:', JSON.stringify(paymentData, null, 2));
     const paymentResponse = await asaasClient.post('/payments', paymentData);
+    console.log('Resposta do Asaas:', JSON.stringify(paymentResponse.data, null, 2));
 
     res.json({
       success: true,
