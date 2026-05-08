@@ -174,7 +174,7 @@ async function handleLogin(e) {
         showDashboard();
         
     } catch (error) {
-        alert('Erro ao fazer login: ' + error.message);
+        showNotificationModal('Erro ao fazer login: ' + error.message, 'error');
     }
 }
 
@@ -1520,17 +1520,32 @@ async function loadPedidosSection() {
             <div class="card-header">
                 <h2 class="card-title">Pedidos</h2>
                 <div>
-                    <select id="statusFilter" class="form-control" style="display: inline-block; width: auto; margin-right: 1rem;">
-                        <option value="">Todos os status</option>
-                        <option value="pending">Pendente</option>
-                        <option value="paid">Pago</option>
-                        <option value="completed">Concluído</option>
-                        <option value="cancelled">Cancelado</option>
-                    </select>
                     <button class="btn btn-secondary" onclick="exportPedidos()">
                         <i class="fas fa-download"></i> Exportar
                     </button>
                 </div>
+            </div>
+            
+            <!-- Abas de Status -->
+            <div class="status-tabs">
+                <button class="tab-btn active" data-status="" onclick="filterByStatus('')">
+                    Todos
+                </button>
+                <button class="tab-btn" data-status="pending" onclick="filterByStatus('pending')">
+                    Pendente
+                </button>
+                <button class="tab-btn" data-status="paid" onclick="filterByStatus('paid')">
+                    Pago
+                </button>
+                <button class="tab-btn" data-status="completed" onclick="filterByStatus('completed')">
+                    Concluído
+                </button>
+                <button class="tab-btn" data-status="delivered" onclick="filterByStatus('delivered')">
+                    Entregue
+                </button>
+                <button class="tab-btn" data-status="cancelled" onclick="filterByStatus('cancelled')">
+                    Cancelado
+                </button>
             </div>
             <div class="table-container">
                 <table id="pedidosTable">
@@ -1560,18 +1575,18 @@ async function loadPedidosSection() {
     `;
     
     // Adicionar event listener para filtro
-    document.getElementById('statusFilter').addEventListener('change', loadPedidosTable);
-    
     await loadPedidosTable();
 }
 
+// Variável global para o filtro de status
+let currentStatusFilter = '';
+
 async function loadPedidosTable() {
     try {
-        const statusFilter = document.getElementById('statusFilter').value;
         let query = supabaseClient.from('order_with_details').select('*');
         
-        if (statusFilter) {
-            query = query.eq('status', statusFilter);
+        if (currentStatusFilter) {
+            query = query.eq('status', currentStatusFilter);
         }
         
         const { data: pedidos, error } = await query.order('created_at', { ascending: false });
@@ -1587,7 +1602,7 @@ async function loadPedidosTable() {
                     <td colspan="8" class="empty-state">
                         <i class="fas fa-shopping-cart"></i>
                         <h3>Nenhum pedido encontrado</h3>
-                        <p>Não há pedidos${statusFilter ? ` com status "${statusFilter}"` : ''}</p>
+                        <p>Não há pedidos${currentStatusFilter ? ` com status "${currentStatusFilter}"` : ''}</p>
                     </td>
                 </tr>
             `;
@@ -1965,6 +1980,42 @@ function closeModal() {
 }
 
 // Helper functions
+function showNotificationModal(message, type = 'success') {
+    const modalHtml = `
+        <div class="notification-modal-overlay" id="notificationModal">
+            <div class="notification-modal">
+                <div class="notification-icon">
+                    <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+                </div>
+                <div class="notification-content">
+                    <h3>${type === 'success' ? 'Sucesso!' : 'Erro!'}</h3>
+                    <p>${message}</p>
+                </div>
+                <div class="notification-actions">
+                    <button class="btn btn-primary" onclick="closeNotificationModal()">OK</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Adicionar modal ao body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Auto-fechar após 3 segundos para mensagens de sucesso
+    if (type === 'success') {
+        setTimeout(() => {
+            closeNotificationModal();
+        }, 3000);
+    }
+}
+
+function closeNotificationModal() {
+    const modal = document.getElementById('notificationModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
 function getStatusBadge(status) {
     const badges = {
         'pending': '<span class="badge badge-warning">Pendente</span>',
@@ -2199,7 +2250,7 @@ async function editTrabalho(id) {
         
     } catch (error) {
         console.error('Erro ao carregar trabalho:', error);
-        alert('Erro ao carregar trabalho: ' + error.message);
+        showNotificationModal('Erro ao carregar trabalho: ' + error.message, 'error');
     }
 }
 
@@ -2275,11 +2326,11 @@ async function handleTrabalhoSubmit(e) {
         
         closeModal();
         await loadTrabalhosTable();
-        alert('Trabalho salvo com sucesso!');
+        showNotificationModal('Trabalho salvo com sucesso!', 'success');
         
     } catch (error) {
         console.error('Erro ao salvar trabalho:', error);
-        alert('Erro ao salvar trabalho: ' + error.message);
+        showNotificationModal('Erro ao salvar trabalho: ' + error.message, 'error');
     }
 }
 
@@ -2295,11 +2346,11 @@ async function deleteTrabalho(id) {
         if (error) throw error;
         
         await loadTrabalhosTable();
-        alert('Trabalho excluído com sucesso!');
+        showNotificationModal('Trabalho excluído com sucesso!', 'success');
         
     } catch (error) {
         console.error('Erro ao excluir trabalho:', error);
-        alert('Erro ao excluir trabalho: ' + error.message);
+        showNotificationModal('Erro ao excluir trabalho: ' + error.message, 'error');
     }
 }
 
@@ -2323,7 +2374,7 @@ async function editRitual(id) {
         
     } catch (error) {
         console.error('Erro ao carregar ritual:', error);
-        alert('Erro ao carregar ritual: ' + error.message);
+        showNotificationModal('Erro ao carregar ritual: ' + error.message, 'error');
     }
 }
 
@@ -2399,11 +2450,11 @@ async function handleRitualSubmit(e) {
         
         closeModal();
         await loadRituaisTable();
-        alert('Ritual salvo com sucesso!');
+        showNotificationModal('Ritual salvo com sucesso!', 'success');
         
     } catch (error) {
         console.error('Erro ao salvar ritual:', error);
-        alert('Erro ao salvar ritual: ' + error.message);
+        showNotificationModal('Erro ao salvar ritual: ' + error.message, 'error');
     }
 }
 
@@ -2419,11 +2470,11 @@ async function deleteRitual(id) {
         if (error) throw error;
         
         await loadRituaisTable();
-        alert('Ritual excluído com sucesso!');
+        showNotificationModal('Ritual excluído com sucesso!', 'success');
         
     } catch (error) {
         console.error('Erro ao excluir ritual:', error);
-        alert('Erro ao excluir ritual: ' + error.message);
+        showNotificationModal('Erro ao excluir ritual: ' + error.message, 'error');
     }
 }
 
@@ -2504,7 +2555,7 @@ async function viewPedido(id) {
         
     } catch (error) {
         console.error('Erro ao carregar pedido:', error);
-        alert('Erro ao carregar pedido: ' + error.message);
+        showNotificationModal('Erro ao carregar pedido: ' + error.message, 'error');
     }
 }
 
@@ -2521,12 +2572,29 @@ async function updatePedidoStatus(id) {
         
         closeModal();
         await loadPedidosTable();
-        alert('Status atualizado com sucesso!');
+        showNotificationModal('Status atualizado com sucesso!', 'success');
         
     } catch (error) {
         console.error('Erro ao atualizar status:', error);
-        alert('Erro ao atualizar status: ' + error.message);
+        showNotificationModal('Erro ao atualizar status: ' + error.message, 'error');
     }
+}
+
+// Função para filtrar por status usando abas
+async function filterByStatus(status) {
+    // Atualizar variável global
+    currentStatusFilter = status;
+    
+    // Atualizar classes das abas
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('data-status') === status) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Recarregar tabela
+    await loadPedidosTable();
 }
 
 async function viewCliente(id) {
@@ -2594,21 +2662,21 @@ async function viewCliente(id) {
         
     } catch (error) {
         console.error('Erro ao carregar cliente:', error);
-        alert('Erro ao carregar cliente: ' + error.message);
+        showNotificationModal('Erro ao carregar cliente: ' + error.message, 'error');
     }
 }
 
 // Export functions
 function exportPedidos() {
-    alert('Função de exportação de pedidos em desenvolvimento...');
+    showNotificationModal('Função de exportação de pedidos em desenvolvimento...', 'error');
 }
 
 function exportClientes() {
-    alert('Função de exportação de clientes em desenvolvimento...');
+    showNotificationModal('Função de exportação de clientes em desenvolvimento...', 'error');
 }
 
 function generateFinancialReport() {
-    alert('Função de geração de relatório financeiro em desenvolvimento...');
+    showNotificationModal('Função de geração de relatório financeiro em desenvolvimento...', 'error');
 }
 
 // File upload state
@@ -2837,12 +2905,12 @@ function handleIconSelect(file, type) {
     const maxSize = 2 * 1024 * 1024; // 2MB
     
     if (!validTypes.includes(file.type)) {
-        alert('Tipo de arquivo inválido. Use PNG, JPG ou SVG.');
+        showNotificationModal('Tipo de arquivo inválido. Use PNG, JPG ou SVG.', 'error');
         return;
     }
     
     if (file.size > maxSize) {
-        alert('Arquivo muito grande. Tamanho máximo: 2MB');
+        showNotificationModal('Arquivo muito grande. Tamanho máximo: 2MB', 'error');
         return;
     }
     
