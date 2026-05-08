@@ -10,6 +10,7 @@ let allOrders = [];
 let currentOrderFilter = 'all';
 let currentTrackOrderId = null;
 let uploadedFiles = [];
+let uploadedImages = {}; // Store uploaded images per service
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
@@ -841,8 +842,65 @@ async function trackOrder(orderId, servicoId = null) {
                                     </div>
                                 `).join('')}
                             </div>
+                            ${item.imagens && item.imagens.length > 0 ? `
+                                <div style="margin-top: 1.5rem;">
+                                    <h6 style="color: var(--primary-gold); margin-bottom: 1rem;">
+                                        <i class="fas fa-image"></i> Imagens Anexadas (${item.imagens.length})
+                                    </h6>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                        ${item.imagens.map((imgUrl, imgIndex) => `
+                                            <div style="position: relative; border: 1px solid var(--glass-border); border-radius: 8px; overflow: hidden;">
+                                                <img src="${imgUrl}" style="width: 100%; height: 150px; object-fit: cover; cursor: pointer;" onclick="window.open('${imgUrl}', '_blank')">
+                                                <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); padding: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                                                    <span style="color: #fff; font-size: 0.75rem;">Imagem ${imgIndex + 1}</span>
+                                                    <a href="${imgUrl}" download style="color: var(--primary-gold); font-size: 0.875rem;" title="Download">
+                                                        <i class="fas fa-download"></i>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                    <div style="margin-top: 1rem; text-align: center;">
+                                        <button onclick='printImages("${item.servico_id}", ${JSON.stringify(perguntas)}, ${JSON.stringify(item.form_data)})' class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                                            <i class="fas fa-print"></i> Imprimir Formulário e Imagens
+                                        </button>
+                                    </div>
+                                </div>
+                            ` : ''}
                         ` : `
-                            <form id="trackOrderForm_${item.servico_id}">
+                            <form id="trackOrderForm_${item.servico_id}" enctype="multipart/form-data">
+                                ${requerImagem ? `
+                                    <!-- Image Upload Section -->
+                                    <div style="background: rgba(212, 175, 55, 0.05); border: 1px solid rgba(212, 175, 55, 0.2); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+                                        <h6 style="color: var(--primary-gold); margin-bottom: 1rem;">
+                                            <i class="fas fa-image"></i> Anexar Imagens (Máximo 3)
+                                        </h6>
+                                        <div id="imageUploadArea_${item.servico_id}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                                            <div class="image-upload-slot" style="border: 2px dashed var(--glass-border); border-radius: 8px; padding: 1rem; text-align: center; cursor: pointer; min-height: 120px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); transition: all 0.3s ease;" onclick="triggerImageUpload('${item.servico_id}', 0)">
+                                                <div>
+                                                    <i class="fas fa-plus" style="font-size: 2rem; color: var(--primary-gold); opacity: 0.5;"></i>
+                                                    <p style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.8rem;">Adicionar Imagem</p>
+                                                </div>
+                                            </div>
+                                            <div class="image-upload-slot" style="border: 2px dashed var(--glass-border); border-radius: 8px; padding: 1rem; text-align: center; cursor: pointer; min-height: 120px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); transition: all 0.3s ease;" onclick="triggerImageUpload('${item.servico_id}', 1)">
+                                                <div>
+                                                    <i class="fas fa-plus" style="font-size: 2rem; color: var(--primary-gold); opacity: 0.5;"></i>
+                                                    <p style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.8rem;">Adicionar Imagem</p>
+                                                </div>
+                                            </div>
+                                            <div class="image-upload-slot" style="border: 2px dashed var(--glass-border); border-radius: 8px; padding: 1rem; text-align: center; cursor: pointer; min-height: 120px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); transition: all 0.3s ease;" onclick="triggerImageUpload('${item.servico_id}', 2)">
+                                                <div>
+                                                    <i class="fas fa-plus" style="font-size: 2rem; color: var(--primary-gold); opacity: 0.5;"></i>
+                                                    <p style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.8rem;">Adicionar Imagem</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <input type="file" id="imageInput_${item.servico_id}" accept="image/png,image/jpeg,image/jpg" multiple style="display: none;" onchange="handleImageSelect('${item.servico_id}', event)">
+                                        <p style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.5rem;">
+                                            Formatos aceitos: PNG, JPG (máx. 5MB por imagem)
+                                        </p>
+                                    </div>
+                                ` : ''}
                                 ${perguntas.map((pergunta, index) => `
                                     <div class="form-group">
                                         <label>${index + 1}. ${pergunta}</label>
@@ -892,20 +950,55 @@ async function handleTrackOrderSubmit(e, servicoId) {
     const formData = new FormData(e.target);
     const answers = {};
     
+    // Extract text answers
     for (let [key, value] of formData.entries()) {
-        answers[key] = value;
+        if (key.startsWith('pergunta_')) {
+            answers[key] = value;
+        }
     }
     
     try {
+        // Upload images if any were added
+        const serviceImages = uploadedImages[servicoId] || {};
+        const imageUrls = [];
+        
+        for (const [imageId, imageData] of Object.entries(serviceImages)) {
+            // Upload image to Supabase Storage
+            const fileName = `form_images/${currentTrackOrderId}/${servicoId}/${imageId}_${imageData.file.name}`;
+            const { data: uploadData, error: uploadError } = await supabaseClient.storage
+                .from('form-images')
+                .upload(fileName, imageData.file);
+            
+            if (uploadError) throw uploadError;
+            
+            // Get public URL
+            const { data: { publicUrl } } = supabaseClient.storage
+                .from('form-images')
+                .getPublicUrl(fileName);
+            
+            imageUrls.push(publicUrl);
+        }
+        
+        // Prepare update data
+        const updateData = {
+            form_data: answers
+        };
+        
+        // Add image URLs if images were uploaded
+        if (imageUrls.length > 0) {
+            updateData.imagens = imageUrls;
+        }
+        
         const { error } = await supabaseClient
             .from('order_items')
-            .update({
-                form_data: answers
-            })
+            .update(updateData)
             .eq('order_id', currentTrackOrderId)
             .eq('servico_id', servicoId);
         
         if (error) throw error;
+        
+        // Clear uploaded images for this service
+        delete uploadedImages[servicoId];
         
         showNotification('Informações salvas com sucesso!', 'success');
         
@@ -1095,9 +1188,175 @@ async function hashPassword(password) {
     const data = encoder.encode(password + 'maegrazi-salt-2024');
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return hashHex;
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
+
+// Trigger image upload for specific slot
+function triggerImageUpload(servicoId, slot) {
+    document.getElementById(`imageInput_${servicoId}`).click();
+};
+
+// Handle image selection
+function handleImageSelect(servicoId, event) {
+    const files = Array.from(event.target.files);
+    if (!files || files.length === 0) return;
+    
+    uploadedImages[servicoId] = uploadedImages[servicoId] || {};
+    
+    // Check total images limit (max 3)
+    const currentImageCount = Object.keys(uploadedImages[servicoId]).length;
+    const availableSlots = 3 - currentImageCount;
+    
+    if (files.length > availableSlots) {
+        showNotification(`Você pode adicionar no máximo ${availableSlots} imagens.`, 'warning');
+        return;
+    }
+    
+    // Process each file
+    files.forEach((file, index) => {
+        // Validate file
+        if (!file.type.startsWith('image/')) {
+            showNotification('Apenas arquivos de imagem são permitidos.', 'error');
+            return;
+        }
+        
+        if (file.size > 5 * 1024 * 1024) { // 5MB
+            showNotification('Cada imagem deve ter no máximo 5MB.', 'error');
+            return;
+        }
+        
+        // Create preview and add to uploaded images
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const imageId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            uploadedImages[servicoId][imageId] = {
+                file: file,
+                preview: e.target.result,
+                name: file.name
+            };
+            
+            updateImageUploadArea(servicoId);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+// Print images and form responses function
+function printImages(servicoId, perguntas, formData) {
+    const item = document.querySelector(`[onclick*="printImages('${servicoId}')"]`);
+    if (!item) return;
+    
+    const images = item.closest('div').querySelectorAll('img');
+    if (images.length === 0) return;
+    
+    let printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Formulário e Imagens Anexadas</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+                .header { text-align: center; margin-bottom: 30px; padding: 20px; background: #1a1a1a; color: #d4af37; border-radius: 8px; }
+                .header h1 { margin: 0; font-size: 24px; }
+                .header p { margin: 5px 0 0 0; color: #ccc; }
+                .section { margin-bottom: 30px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                .section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; border-bottom: 2px solid #d4af37; padding-bottom: 10px; }
+                .question-item { margin-bottom: 15px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+                .question-label { font-weight: bold; color: #d4af37; margin-bottom: 5px; }
+                .question-answer { color: #333; margin-top: 5px; }
+                .image-container { margin-bottom: 20px; page-break-inside: avoid; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                .image-container img { max-width: 100%; height: auto; border-radius: 4px; }
+                .image-label { margin-top: 10px; font-weight: bold; color: #333; text-align: center; }
+                @media print { 
+                    .no-print { display: none; } 
+                    body { background: white; }
+                    .header { background: white; color: black; border: 2px solid #d4af37; }
+                    .section { box-shadow: none; border: 1px solid #ddd; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Mae Grazi - Formulário e Imagens</h1>
+                <p>Comprovante de envio</p>
+            </div>
+            
+            ${perguntas && formData ? `
+            <div class="section">
+                <div class="section-title"><i class="fas fa-clipboard-list"></i> Perguntas e Respostas</div>
+                ${perguntas.map((pergunta, index) => `
+                    <div class="question-item">
+                        <div class="question-label">${index + 1}. ${pergunta}</div>
+                        <div class="question-answer">${formData[`pergunta_${index}`] || 'Não respondido'}</div>
+                    </div>
+                `).join('')}
+            </div>
+            ` : ''}
+            
+            <div class="section">
+                <div class="section-title"><i class="fas fa-image"></i> Imagens Anexadas (${images.length})</div>
+                ${Array.from(images).map((img, index) => `
+                    <div class="image-container">
+                        <img src="${img.src}">
+                        <div class="image-label">Imagem ${index + 1}</div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="no-print" style="text-align: center; margin-top: 30px; padding: 20px;">
+                <button onclick="window.print()" style="padding: 12px 24px; font-size: 16px; background: #d4af37; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    <i class="fas fa-print"></i> Imprimir Documento
+                </button>
+            </div>
+            <script>setTimeout(() => window.print(), 500);</script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+// Update image upload area UI
+function updateImageUploadArea(servicoId) {
+    const uploadArea = document.getElementById(`imageUploadArea_${servicoId}`);
+    const images = uploadedImages[servicoId] || {};
+    
+    let html = '';
+    const slots = ['slot0', 'slot1', 'slot2'];
+    
+    slots.forEach((slotId, index) => {
+        const image = Object.values(images)[index];
+        
+        if (image) {
+            html += `
+                <div class="image-upload-slot" style="position: relative; border: 2px solid var(--primary-gold); border-radius: 8px; padding: 0.5rem; cursor: pointer;" onclick="removeImage('${servicoId}', '${Object.keys(images)[index]}')">
+                    <img src="${image.preview}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px;">
+                    <button type="button" style="position: absolute; top: -8px; right: -8px; background: var(--danger); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 12px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="image-upload-slot" style="border: 2px dashed var(--glass-border); border-radius: 8px; padding: 1rem; text-align: center; cursor: pointer; min-height: 120px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.02); transition: all 0.3s ease;" onclick="triggerImageUpload('${servicoId}', ${index})">
+                    <div>
+                        <i class="fas fa-plus" style="font-size: 2rem; color: var(--primary-gold); opacity: 0.5;"></i>
+                        <p style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.8rem;">Adicionar Imagem</p>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    uploadArea.innerHTML = html;
+}
+
+// Remove image from upload area
+function removeImage(servicoId, imageId) {
+    if (uploadedImages[servicoId] && uploadedImages[servicoId][imageId]) {
+        delete uploadedImages[servicoId][imageId];
+        updateImageUploadArea(servicoId);
+    }
+};
 
 // Show Notification (reused from services-complete.js)
 function showNotification(message, type = 'info') {

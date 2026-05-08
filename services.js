@@ -1164,13 +1164,16 @@ async function loadCart() {
 
 // Add item to cart
 async function addToCart(type, serviceId, nome, valor) {
-    if (!currentUser) {
+    // Verificar se usuário está logado
+    if (!currentUser || !currentUser.id) {
         showNotification('Faça login para adicionar itens ao carrinho', 'warning');
         openLoginModal();
         return;
     }
     
     try {
+        console.log('Adicionando ao carrinho:', { cliente_id: currentUser.id, tipo: type, servico_id: serviceId });
+        
         const { error } = await supabaseClient
             .from('cart_items')
             .upsert({
@@ -1184,13 +1187,24 @@ async function addToCart(type, serviceId, nome, valor) {
                 onConflict: 'cliente_id,tipo,servico_id'
             });
         
-        if (error) throw error;
+        if (error) {
+            console.error('Erro do Supabase:', error);
+            throw error;
+        }
         
         await loadCart();
         showNotification('Item adicionado ao carrinho!', 'success');
     } catch (error) {
         console.error('Erro ao adicionar ao carrinho:', error);
-        showNotification('Erro ao adicionar ao carrinho', 'error');
+        
+        // Verificar se é erro de chave estrangeira
+        if (error.code === '23503') {
+            showNotification('Erro: usuário não encontrado. Faça login novamente.', 'error');
+            // Tentar fazer logout para forçar novo login
+            logout();
+        } else {
+            showNotification('Erro ao adicionar ao carrinho: ' + error.message, 'error');
+        }
     }
 }
 

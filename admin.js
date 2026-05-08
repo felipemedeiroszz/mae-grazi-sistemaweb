@@ -1979,6 +1979,128 @@ function closeModal() {
     }
 }
 
+// Print images function for admin panel
+function printAdminImages(pedidoId, formData) {
+    const modalBody = document.getElementById('modalBody');
+    if (!modalBody) return;
+    
+    const images = modalBody.querySelectorAll('img[src*="form-images"]');
+    if (images.length === 0) {
+        showNotificationModal('Nenhuma imagem para imprimir', 'error');
+        return;
+    }
+    
+    // Extract questions and answers from form data if available
+    let questionsHtml = '';
+    if (formData) {
+        try {
+            const formDataObj = typeof formData === 'string' ? JSON.parse(formData) : formData;
+            if (Object.keys(formDataObj).length > 0) {
+                questionsHtml = `
+                <div class="section">
+                    <div class="section-title"><i class="fas fa-clipboard-list"></i> Perguntas e Respostas</div>
+                    ${Object.entries(formDataObj).map(([key, value], index) => `
+                        <div class="question-item">
+                            <div class="question-label">${index + 1}. ${key.replace(/_/g, ' ')}</div>
+                            <div class="question-answer">${value}</div>
+                        </div>
+                    `).join('')}
+                </div>
+                `;
+            }
+        } catch (e) {
+            console.error('Erro ao processar form_data:', e);
+        }
+    }
+    
+    let printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Imprimir Formulário - Pedido #${pedidoId.substring(0, 8)}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+                .header { text-align: center; margin-bottom: 30px; padding: 20px; background: #1a1a1a; color: #d4af37; border-radius: 8px; }
+                .header h1 { margin: 0; font-size: 24px; }
+                .header p { margin: 5px 0 0 0; color: #ccc; }
+                .section { margin-bottom: 30px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                .section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; border-bottom: 2px solid #d4af37; padding-bottom: 10px; }
+                .question-item { margin-bottom: 15px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+                .question-label { font-weight: bold; color: #d4af37; margin-bottom: 5px; }
+                .question-answer { color: #333; margin-top: 5px; }
+                .image-container { margin-bottom: 30px; page-break-inside: avoid; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                .image-container img { max-width: 100%; height: auto; border-radius: 4px; }
+                .image-label { margin-top: 10px; font-weight: bold; color: #333; text-align: center; }
+                @media print { 
+                    .no-print { display: none; } 
+                    body { background: white; }
+                    .header { background: white; color: black; border: 2px solid #d4af37; }
+                    .section { box-shadow: none; border: 1px solid #ddd; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Mae Grazi - Formulário e Imagens</h1>
+                <p>Pedido #${pedidoId.substring(0, 8)}</p>
+            </div>
+            
+            ${questionsHtml}
+            
+            <div class="section">
+                <div class="section-title"><i class="fas fa-image"></i> Imagens Anexadas (${images.length})</div>
+                ${Array.from(images).map((img, index) => `
+                    <div class="image-container">
+                        <img src="${img.src}">
+                        <div class="image-label">Imagem ${index + 1}</div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="no-print" style="text-align: center; margin-top: 30px; padding: 20px;">
+                <button onclick="window.print()" style="padding: 12px 24px; font-size: 16px; background: #d4af37; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    <i class="fas fa-print"></i> Imprimir Documento
+                </button>
+            </div>
+            <script>setTimeout(() => window.print(), 500);</script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+// Download all images function for admin panel
+async function downloadAllImages(pedidoId, imageUrls) {
+    if (!imageUrls || imageUrls.length === 0) {
+        showNotificationModal('Nenhuma imagem para baixar', 'error');
+        return;
+    }
+    
+    showNotificationModal(`Iniciando download de ${imageUrls.length} imagens...`, 'success');
+    
+    for (let i = 0; i < imageUrls.length; i++) {
+        try {
+            const response = await fetch(imageUrls[i]);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `pedido_${pedidoId.substring(0, 8)}_imagem_${i + 1}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            // Small delay between downloads
+            await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+            console.error('Erro ao baixar imagem:', error);
+        }
+    }
+    
+    showNotificationModal('Download concluído!', 'success');
+}
+
 // Helper functions
 function showNotificationModal(message, type = 'success') {
     const modalHtml = `
@@ -2488,6 +2610,69 @@ async function viewPedido(id) {
         
         if (error) throw error;
         
+        // Fetch order_items to get imagens and service info
+        const { data: orderItems, error: itemsError } = await supabaseClient
+            .from('order_items')
+            .select('imagens, form_data, servico_id, tipo, nome')
+            .eq('order_id', id);
+        
+        if (itemsError) console.error('Erro ao carregar itens:', itemsError);
+        
+        // Fetch service questions if we have order items
+        let serviceQuestions = [];
+        if (orderItems && orderItems.length > 0) {
+            const firstItem = orderItems[0];
+            
+            // Try to get questions from trabalhos or rituais
+            if (firstItem.servico_id) {
+                try {
+                    let serviceData = null;
+                    
+                    // Check if it's a trabalho
+                    if (firstItem.tipo === 'trabalho') {
+                        const { data } = await supabaseClient
+                            .from('trabalhos')
+                            .select('perguntas')
+                            .eq('id', firstItem.servico_id)
+                            .single();
+                        serviceData = data;
+                    } 
+                    // Check if it's a ritual
+                    else if (firstItem.tipo === 'ritual') {
+                        const { data } = await supabaseClient
+                            .from('rituais')
+                            .select('perguntas')
+                            .eq('id', firstItem.servico_id)
+                            .single();
+                        serviceData = data;
+                    }
+                    
+                    if (serviceData && serviceData.perguntas) {
+                        serviceQuestions = serviceData.perguntas;
+                    }
+                } catch (serviceError) {
+                    console.error('Erro ao carregar perguntas do serviço:', serviceError);
+                }
+            }
+            
+            // Merge imagens from order_items into pedido
+            const allImagens = orderItems.reduce((acc, item) => {
+                if (item.imagens && Array.isArray(item.imagens)) {
+                    return [...acc, ...item.imagens];
+                }
+                return acc;
+            }, []);
+            pedido.imagens = allImagens;
+            
+            // Also get the first item's form_data if pedido doesn't have it
+            if (!pedido.form_data && firstItem.form_data) {
+                pedido.form_data = firstItem.form_data;
+            }
+        }
+        
+        // Store questions in pedido for use in template
+        pedido.service_perguntas = serviceQuestions;
+        
         openModal('Detalhes do Pedido', `
             <div class="pedido-details">
                 <div class="form-group">
@@ -2533,16 +2718,71 @@ async function viewPedido(id) {
                         ${(() => {
                             try {
                                 const formData = typeof pedido.form_data === 'string' ? JSON.parse(pedido.form_data) : pedido.form_data;
-                                return Object.entries(formData).map(([key, value]) => `
-                                    <div style="margin-bottom: 0.75rem;">
-                                        <strong style="color: var(--primary); text-transform: capitalize;">${key.replace(/_/g, ' ')}:</strong>
-                                        <div style="color: var(--text-secondary); margin-top: 0.25rem;">${value}</div>
+                                
+                                // Get service questions from order_items if available
+                                let serviceQuestions = [];
+                                if (orderItems && orderItems.length > 0 && orderItems[0].servico_id) {
+                                    // Try to get questions from the first item's service
+                                    const firstItem = orderItems[0];
+                                    // Questions will be fetched and stored in a variable
+                                    serviceQuestions = pedido.service_perguntas || [];
+                                }
+                                
+                                return Object.entries(formData).map(([key, value], index) => {
+                                    // Try to get the actual question text
+                                    let questionText = key.replace(/_/g, ' ');
+                                    
+                                    // If key is like "pergunta_0", try to get the actual question
+                                    const match = key.match(/pergunta_(\d+)/);
+                                    if (match && serviceQuestions[parseInt(match[1])]) {
+                                        questionText = serviceQuestions[parseInt(match[1])];
+                                    }
+                                    
+                                    return `
+                                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                                        <div style="color: var(--primary); font-weight: 600; margin-bottom: 0.5rem; text-transform: none;">
+                                            ${index + 1}. ${questionText}
+                                        </div>
+                                        <div style="color: var(--text-secondary); padding-left: 1rem; border-left: 2px solid var(--primary);">${value || '<em style="opacity: 0.5;">Não respondido</em>'}</div>
                                     </div>
-                                `).join('');
+                                `;
+                                }).join('');
                             } catch (e) {
                                 return '<div style="color: var(--text-secondary);">Erro ao carregar dados do formulário</div>';
                             }
                         })()}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- Imagens Anexadas -->
+                ${pedido.imagens && pedido.imagens.length > 0 ? `
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-image"></i> Imagens Anexadas (${pedido.imagens.length})
+                    </label>
+                    <div style="background: var(--dark); padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                            ${pedido.imagens.map((imgUrl, imgIndex) => `
+                                <div style="position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
+                                    <img src="${imgUrl}" style="width: 100%; height: 150px; object-fit: cover; cursor: pointer;" onclick="window.open('${imgUrl}', '_blank')">
+                                    <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); padding: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="color: #fff; font-size: 0.75rem;">Imagem ${imgIndex + 1}</span>
+                                        <a href="${imgUrl}" download style="color: var(--primary); font-size: 0.875rem;" title="Download">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="text-align: center;">
+                            <button onclick="printAdminImages('${id}', ${JSON.stringify(pedido.form_data).replace(/"/g, '&quot;')})" class="btn btn-secondary" style="padding: 0.5rem 1rem; margin-right: 0.5rem;">
+                                <i class="fas fa-print"></i> Imprimir Formulário e Imagens
+                            </button>
+                            <button onclick="downloadAllImages('${id}', ${JSON.stringify(pedido.imagens).replace(/"/g, '&quot;')})" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                                <i class="fas fa-download"></i> Baixar Todas
+                            </button>
+                        </div>
                     </div>
                 </div>
                 ` : ''}
