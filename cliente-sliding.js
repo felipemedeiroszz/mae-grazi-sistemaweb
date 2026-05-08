@@ -71,10 +71,17 @@ async function handleSignUp(e) {
     const nome = formData.get('nome');
     const email = formData.get('email');
     const whatsapp = formData.get('whatsapp');
+    const cpf = formData.get('cpf');
     const password = formData.get('password');
     
-    if (!nome || !email || !password) {
+    if (!nome || !email || !password || !cpf) {
         showMessage('signUpError', 'Preencha todos os campos obrigatórios');
+        return;
+    }
+    
+    // Validate CPF
+    if (!isValidCPF(cpf)) {
+        showMessage('signUpError', 'CPF inválido. Verifique os dígitos.');
         return;
     }
     
@@ -101,6 +108,7 @@ async function handleSignUp(e) {
                 nome,
                 email,
                 whatsapp,
+                cpf: cpf.replace(/\D/g, ''), // Remove non-digits
                 password_hash: passwordHash,
                 created_at: new Date().toISOString()
             })
@@ -212,3 +220,46 @@ function hideAllMessages() {
 // Export functions for global access
 window.showMessage = showMessage;
 window.hideAllMessages = hideAllMessages;
+
+// CPF formatting
+document.querySelector('input[name="cpf"]')?.addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+    
+    if (value.length <= 11) {
+        if (value.length > 9) {
+            value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        } else if (value.length > 6) {
+            value = value.replace(/(\d{3})(\d{3})(\d{3})/, '$1.$2.$3');
+        } else if (value.length > 3) {
+            value = value.replace(/(\d{3})(\d{3})/, '$1.$2');
+        }
+    }
+    
+    e.target.value = value;
+});
+
+// CPF validation function
+function isValidCPF(cpf) {
+    cpf = cpf.replace(/\D/g, '');
+    
+    if (cpf.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(cpf)) return false;
+    
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+        sum += parseInt(cpf.charAt(i)) * (10 - i);
+    }
+    let rev = 11 - (sum % 11);
+    if (rev === 10 || rev === 11) rev = 0;
+    if (rev !== parseInt(cpf.charAt(9))) return false;
+    
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += parseInt(cpf.charAt(i)) * (11 - i);
+    }
+    rev = 11 - (sum % 11);
+    if (rev === 10 || rev === 11) rev = 0;
+    if (rev !== parseInt(cpf.charAt(10))) return false;
+    
+    return true;
+}

@@ -30,12 +30,13 @@ async function handleRegistration(e) {
     const fullName = document.getElementById('fullName').value.trim();
     const email = document.getElementById('email').value.trim();
     const phone = document.getElementById('phone').value.trim();
+    const cpf = document.getElementById('cpf').value.trim();
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
     const termsAccepted = document.getElementById('terms').checked;
     
     // Validation
-    if (!validateForm(fullName, email, phone, password, confirmPassword, termsAccepted)) {
+    if (!validateForm(fullName, email, phone, cpf, password, confirmPassword, termsAccepted)) {
         return;
     }
     
@@ -66,6 +67,7 @@ async function handleRegistration(e) {
                 nome: fullName,
                 email: email,
                 telefone: phone,
+                cpf: cpf.replace(/\D/g, ''), // Remove non-digits
                 password_hash: passwordHash,
                 created_at: new Date().toISOString()
             })
@@ -90,7 +92,7 @@ async function handleRegistration(e) {
 }
 
 // Validation Functions
-function validateForm(fullName, email, phone, password, confirmPassword, termsAccepted) {
+function validateForm(fullName, email, phone, cpf, password, confirmPassword, termsAccepted) {
     hideMessages();
     
     // Name validation
@@ -108,6 +110,17 @@ function validateForm(fullName, email, phone, password, confirmPassword, termsAc
     // Phone validation
     if (!phone || phone.length < 10) {
         showError('Por favor, digite um telefone válido.');
+        return false;
+    }
+    
+    // CPF validation
+    if (!cpf || cpf.length < 11) {
+        showError('Por favor, digite um CPF válido.');
+        return false;
+    }
+    
+    if (!isValidCPF(cpf)) {
+        showError('O CPF informado é inválido.');
         return false;
     }
     
@@ -277,6 +290,55 @@ async function hashPassword(password) {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     return hashHex;
+}
+
+// CPF formatting
+document.getElementById('cpf')?.addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+    
+    if (value.length <= 11) {
+        if (value.length > 9) {
+            value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        } else if (value.length > 6) {
+            value = value.replace(/(\d{3})(\d{3})(\d{3})/, '$1.$2.$3');
+        } else if (value.length > 3) {
+            value = value.replace(/(\d{3})(\d{3})/, '$1.$2');
+        }
+    }
+    
+    e.target.value = value;
+});
+
+// CPF validation function
+function isValidCPF(cpf) {
+    // Remove non-digits
+    cpf = cpf.replace(/\D/g, '');
+    
+    // Check length
+    if (cpf.length !== 11) return false;
+    
+    // Check for known invalid CPFs (all same digit)
+    if (/^(\d)\1{10}$/.test(cpf)) return false;
+    
+    // Validate first digit
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+        sum += parseInt(cpf.charAt(i)) * (10 - i);
+    }
+    let rev = 11 - (sum % 11);
+    if (rev === 10 || rev === 11) rev = 0;
+    if (rev !== parseInt(cpf.charAt(9))) return false;
+    
+    // Validate second digit
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += parseInt(cpf.charAt(i)) * (11 - i);
+    }
+    rev = 11 - (sum % 11);
+    if (rev === 10 || rev === 11) rev = 0;
+    if (rev !== parseInt(cpf.charAt(10))) return false;
+    
+    return true;
 }
 
 // Check auth status on load

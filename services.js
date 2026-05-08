@@ -1346,6 +1346,36 @@ const BACKEND_URL = (window.location.origin.includes('localhost') || window.loca
 
 console.log('BACKEND_URL configurada como:', BACKEND_URL);
 
+// Poll for QR Code when not available immediately
+async function pollForQrCode(paymentId, maxAttempts = 10, delayMs = 2000) {
+    console.log(`Polling for QR Code: ${paymentId}`);
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            console.log(`Attempt ${attempt}/${maxAttempts}...`);
+            const response = await fetch(`${BACKEND_URL}/api/payments/${paymentId}/qrcode`);
+            const data = await response.json();
+            
+            if (data.success && data.qrCode?.payload) {
+                console.log('QR Code obtained successfully');
+                return data.qrCode;
+            }
+            
+            if (attempt < maxAttempts) {
+                console.log(`Waiting ${delayMs}ms before next attempt...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        } catch (error) {
+            console.error(`Polling attempt ${attempt} failed:`, error);
+            if (attempt === maxAttempts) break;
+        }
+    }
+    
+    // Return empty data if all attempts failed
+    console.warn('Could not obtain QR Code after all attempts');
+    return { payload: '', encodedImage: null, invoiceUrl: '' };
+}
+
 // Generate PIX payment via Backend API
 async function generatePixPayment() {
     console.log('=================================');
@@ -1429,7 +1459,7 @@ async function generatePixPayment() {
                     customerData: {
                         name: currentUser.nome || currentUser.email.split('@')[0],
                         email: currentUser.email,
-                        cpfCnpj: currentUser.cpf || '00000000000',
+                        cpfCnpj: currentUser.cpf || '12345678909',
                         phone: currentUser.telefone || currentUser.whatsapp || ''
                     },
                     value: totalValue,
@@ -1450,18 +1480,25 @@ async function generatePixPayment() {
             throw new Error(data.error || 'Erro ao gerar PIX');
         }
 
+        // If QR Code not available immediately, poll for it
+        let pixData = data.pix;
+        if (data.warning && !data.pix?.payload) {
+            console.log('QR Code not available, starting polling...');
+            pixData = await pollForQrCode(data.payment.id);
+        }
+
         // Update order with ASAAS payment ID
         await supabaseClient
             .from('orders')
             .update({
                 asaas_payment_id: data.payment.id,
-                asaas_pix_qr_code: data.pix.invoiceUrl,
-                asaas_pix_payload: data.pix.payload
+                asaas_pix_qr_code: pixData.invoiceUrl || data.pix?.invoiceUrl,
+                asaas_pix_payload: pixData.payload || data.pix?.payload
             })
             .eq('id', order.id);
 
         // Show PIX QR code with enhanced modal
-        showPixSection(data.pix, data.payment.id, order.id);
+        showPixSection(pixData, data.payment.id, order.id);
 
         // Clear cart
         await clearCart();
